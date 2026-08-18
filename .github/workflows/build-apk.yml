@@ -1,0 +1,94 @@
+Entername: Build and Publish Debug APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: Build & Publish Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify Java environment
+        run: |
+          java -version
+          echo "JAVA_HOME is set to: $JAVA_HOME"
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Create temporary debug keystore
+        run: |
+          keytool -genkeypair \
+            -v \
+            -keystore ./debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify debug APK
+        run: |
+          if [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "::error::app-debug.apk not found"
+            exit 1
+          fi
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Prepare APK release asset
+        id: prepare_asset
+        run: |
+          RUNNER_TEMP_DIR="${RUNNER_TEMP:-/tmp}/release-asset"
+          mkdir -p "$RUNNER_TEMP_DIR"
+          APK_FILENAME="Kalkulyator-debug-build-${GITHUB_RUN_NUMBER}.apk"
+          cp "app/build/outputs/apk/debug/app-debug.apk" "${RUNNER_TEMP_DIR}/${APK_FILENAME}"
+          echo "asset_path=${RUNNER_TEMP_DIR}/${APK_FILENAME}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish APK to GitHub Releases
+        id: publish_release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.prepare_asset.outputs.tag_name }}" \
+            "${{ steps.prepare_asset.outputs.asset_path }}" \
+            --target "$GITHUB_SHA" \
+            --title "Debug APK Build #${GITHUB_RUN_NUMBER}" \
+            --notes "Avtomatik yaratilgan Debug APK fayli." \
+            --latest
+
+      - name: Report Summary
+        if: always()
+        run: |
+          echo "## 📱 Android APK Tayyor!" >> "$GITHUB_STEP_SUMMARY"
