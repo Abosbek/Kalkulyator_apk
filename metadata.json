@@ -1,0 +1,7 @@
+{
+  "name": "Kalkulyator",
+  "description": "Zamonaviy va qulay, mukammal dizayn va hisoblash funksiyalariga ega Android kalkulyator ilovasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
